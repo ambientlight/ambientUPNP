@@ -37,7 +37,7 @@ public struct SocketPosix
         case CannotBindSocket(Int32)
         case ListenError(Int32)
         
-        case UnexpectedEOFOnRead
+        case Terminated
         
         case ReadError(Int32)
         case SendError(Int32)
@@ -124,7 +124,7 @@ public struct SocketPosix
         if (numRead > 0){
             return NSData(bytes: buf, length: numRead)
         } else if (numRead == 0){
-            throw SocketPosix.Error.UnexpectedEOFOnRead
+            throw SocketPosix.Error.Terminated
         } else {
             throw SocketPosix.Error.ReadError(errno)
         }
@@ -141,7 +141,7 @@ public struct SocketPosix
         if (numRead > 0){
             return (NSData(bytes: buf, length: numRead), unsafeBitCast(senderAddress, sockaddr_in.self))
         } else if (numRead == 0){
-            throw SocketPosix.Error.UnexpectedEOFOnRead
+            throw SocketPosix.Error.Terminated
         } else {
             throw SocketPosix.Error.ReadError(errno)
         }

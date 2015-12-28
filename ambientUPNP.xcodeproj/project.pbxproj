@@ -32,6 +32,10 @@
 		1A9F6AFA1BF2353C00833424 /* SOAPRequest.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F6AF61BF2353C00833424 /* SOAPRequest.swift */; };
 		1A9F6AFB1BF2353C00833424 /* SOAPResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F6AF71BF2353C00833424 /* SOAPResponse.swift */; };
 		1A9F6AFC1BF2353C00833424 /* SOAPMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1A9F6AF81BF2353C00833424 /* SOAPMessage.swift */; };
+		1AE139FB1C31C66200715882 /* NSString+HTML.h in Headers */ = {isa = PBXBuildFile; fileRef = 1AE139F71C31C66200715882 /* NSString+HTML.h */; settings = {ATTRIBUTES = (Public, ); }; };
+		1AE139FC1C31C66200715882 /* NSString+HTML.m in Sources */ = {isa = PBXBuildFile; fileRef = 1AE139F81C31C66200715882 /* NSString+HTML.m */; };
+		1AE139FD1C31C66200715882 /* GTMNSString+HTML.h in Headers */ = {isa = PBXBuildFile; fileRef = 1AE139F91C31C66200715882 /* GTMNSString+HTML.h */; settings = {ATTRIBUTES = (Private, ); }; };
+		1AE139FE1C31C66200715882 /* GTMNSString+HTML.m in Sources */ = {isa = PBXBuildFile; fileRef = 1AE139FA1C31C66200715882 /* GTMNSString+HTML.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -73,6 +77,10 @@
 		1A9F6AF61BF2353C00833424 /* SOAPRequest.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SOAPRequest.swift; sourceTree = "<group>"; };
 		1A9F6AF71BF2353C00833424 /* SOAPResponse.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SOAPResponse.swift; sourceTree = "<group>"; };
 		1A9F6AF81BF2353C00833424 /* SOAPMessage.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = SOAPMessage.swift; sourceTree = "<group>"; };
+		1AE139F71C31C66200715882 /* NSString+HTML.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "NSString+HTML.h"; sourceTree = "<group>"; };
+		1AE139F81C31C66200715882 /* NSString+HTML.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "NSString+HTML.m"; sourceTree = "<group>"; };
+		1AE139F91C31C66200715882 /* GTMNSString+HTML.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = "GTMNSString+HTML.h"; sourceTree = "<group>"; };
+		1AE139FA1C31C66200715882 /* GTMNSString+HTML.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = "GTMNSString+HTML.m"; sourceTree = "<group>"; };
 		1AF1A4251BA495D4003EC722 /* upnpPlayground.playground */ = {isa = PBXFileReference; lastKnownFileType = file.playground; path = upnpPlayground.playground; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -162,12 +170,24 @@
 		1A8743471B960E1300DAF4E1 /* Supporting Files */ = {
 			isa = PBXGroup;
 			children = (
+				1AE139FF1C31C95900715882 /* _legacy */,
 				1A87432F1B960CD800DAF4E1 /* ambientUPNP.h */,
 				1A0D33C11C2F2D5B004F7DD0 /* ifaddrs.h */,
 				1A8743311B960CD800DAF4E1 /* Info.plist */,
 				1AF1A4251BA495D4003EC722 /* upnpPlayground.playground */,
 			);
 			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		1AE139FF1C31C95900715882 /* _legacy */ = {
+			isa = PBXGroup;
+			children = (
+				1AE139F71C31C66200715882 /* NSString+HTML.h */,
+				1AE139F81C31C66200715882 /* NSString+HTML.m */,
+				1AE139F91C31C66200715882 /* GTMNSString+HTML.h */,
+				1AE139FA1C31C66200715882 /* GTMNSString+HTML.m */,
+			);
+			name = _legacy;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -177,7 +197,9 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				1AE139FD1C31C66200715882 /* GTMNSString+HTML.h in Headers */,
 				1A0D33C61C2F311A004F7DD0 /* ifaddrs.h in Headers */,
+				1AE139FB1C31C66200715882 /* NSString+HTML.h in Headers */,
 				1A8743301B960CD800DAF4E1 /* ambientUPNP.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -228,7 +250,7 @@
 		1A8743231B960CD800DAF4E1 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastSwiftUpdateCheck = 0700;
+				LastSwiftUpdateCheck = 0720;
 				LastUpgradeCheck = 0700;
 				ORGANIZATIONNAME = ambientlight;
 				TargetAttributes = {
@@ -310,6 +332,7 @@
 				1A8743581B96221500DAF4E1 /* SSDPMessage.swift in Sources */,
 				1A9F6AFB1BF2353C00833424 /* SOAPResponse.swift in Sources */,
 				1A408A001BEF0C0500812AA7 /* UPNPStateVariable.swift in Sources */,
+				1AE139FC1C31C66200715882 /* NSString+HTML.m in Sources */,
 				1A87434B1B960E5900DAF4E1 /* NSRegularExpression+CapturingGroups.swift in Sources */,
 				1A4089FE1BEEFBAC00812AA7 /* UPNPArgument.swift in Sources */,
 				1A58588A1BA4374F00433E9D /* UPNPEntity.swift in Sources */,
@@ -317,6 +340,7 @@
 				1A4089FB1BEE82FD00812AA7 /* UPNPAction.swift in Sources */,
 				1A2141181BA1EC1600F5BA1B /* UPNPDevice.swift in Sources */,
 				1A9F6AFA1BF2353C00833424 /* SOAPRequest.swift in Sources */,
+				1AE139FE1C31C66200715882 /* GTMNSString+HTML.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

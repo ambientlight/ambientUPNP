@@ -39,7 +39,7 @@ public class GENAServer {
     public private(set) var eventNotificationPersistentConnectionDispatchSources = [String: dispatch_source_t]()
     
     //subscriptionData: [subscriberService: (sid, expirationTimer, resubscriptionTimer)]
-    public private(set) var subscribersData = [UPNPService: (String, DispatchTimer, DispatchTimer)]()
+    public private(set) var subscribersData = [UPNPService: (String, DispatchTimer?, DispatchTimer?)]()
     
     
     public private(set) var isRunning = false
@@ -125,7 +125,7 @@ public class GENAServer {
             // setting up a dispatch_source for connected socket, or closing the connection
             if (needsToKeepPersistentConnection && eventSubscriptionIdentifierº != nil){
                 
-                NSLog("Keep-alive: Connected \(SocketPosix.addressString(unsafeBitCast(publisherAddress, sockaddr_in.self))) with socket(\(publisherSocket)) for event notifications.")
+                //NSLog("Keep-alive: Connected \(SocketPosix.addressString(unsafeBitCast(publisherAddress, sockaddr_in.self))) with socket(\(publisherSocket)) for event notifications.")
                 
                 let publisherReadSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(publisherSocket), 0, self._unicastQueue)
                 self.eventNotificationPersistentConnectionDispatchSources[eventSubscriptionIdentifierº!] = publisherReadSource
@@ -134,14 +134,25 @@ public class GENAServer {
                     do {
                         
                         let (data, senderAddress) = try SocketPosix.recvData(publisherSocket)
-                        let eventMessage = try GENAMessage.messageWithData(data, senderAddress: senderAddress)
-                        needsToKeepPersistentConnection = try self._handleUnicastEventMessageAndNotifyIfConnectionShouldBeClosed(eventMessage, socket: publisherSocket)
-                        if (!needsToKeepPersistentConnection){
-                            dispatch_source_cancel(publisherReadSource)
+                        do {
+                            let eventMessage = try GENAMessage.messageWithData(data, senderAddress: senderAddress)
+                            needsToKeepPersistentConnection = try self._handleUnicastEventMessageAndNotifyIfConnectionShouldBeClosed(eventMessage, socket: publisherSocket)
+                            if (!needsToKeepPersistentConnection){
+                                dispatch_source_cancel(publisherReadSource)
+                            }
+                        } catch {
+                            NSLog("Keep-alive: socket(\(publisherSocket)): \(error)")
                         }
                         
                     } catch {
-                        print(error)
+                        
+                        if case SocketPosix.Error.Terminated(/*let errno*/) = error {
+                            //
+                        } else {
+                            NSLog("Keep-alive: socket(\(publisherSocket)): \(error). Socket closed.")
+                        }
+                        
+                        dispatch_source_cancel(publisherReadSource)
                     }
                 }
                 
@@ -194,9 +205,9 @@ public class GENAServer {
             return
         }
         
-        let callbackURL = NSURL(string: "http://\(SocketPosix.addressString(interfaceAddress)):\(GENAUnicastListeningPort)")
+        let callbackURL = NSURL(string: "http://\(SocketPosix.addressString(interfaceAddress)):\(GENAUnicastListeningPort)/event/")
         subscribeRequest.setValue(hostString, forHTTPHeaderField: GENAMessage.HeaderField.Host.rawValue)
-        subscribeRequest.setValue(callbackURL!.absoluteString, forHTTPHeaderField: GENAMessage.HeaderField.Callback.rawValue)
+        subscribeRequest.setValue("<\(callbackURL!.absoluteString)>", forHTTPHeaderField: GENAMessage.HeaderField.Callback.rawValue)
         subscribeRequest.setValue(UPNPEventNotificationType, forHTTPHeaderField: GENAMessage.HeaderField.NT.rawValue)
         
         let sessionConfiguration = NSURLSessionConfiguration.defaultSessionConfiguration()
@@ -223,6 +234,13 @@ public class GENAServer {
             
                 guard let timeoutString = timeoutComponentsString.componentsSeparatedByString("-").last else {
                     completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
+                    return
+                }
+                
+                // infinite subscription. No Expiration
+                if (timeoutString == "infinite"){
+                    self.subscribersData[service] = (subscriptionIdentifier, nil, nil)
+                    completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
                     return
                 }
                 
@@ -268,7 +286,7 @@ public class GENAServer {
     
     public func resubscribeToService(service:UPNPService, completionHandler:(subscriptionIdentifierº:String?, errorº:ErrorType?) -> Void){
         
-        guard let (currentSubscriptionSID, currentExpirationTimer, currentResubscriptionTimer) = self.subscribersData[service] else {
+        guard let (currentSubscriptionSID, currentExpirationTimerº, currentResubscriptionTimerº) = self.subscribersData[service] else {
             completionHandler(subscriptionIdentifierº: nil, errorº: Error.NotSubscribedToService)
             return
         }
@@ -318,15 +336,22 @@ public class GENAServer {
                     return
                 }
                 
+                // infinite subscription. No Expiration
+                if (timeoutString == "infinite"){
+                    self.subscribersData[service] = (subscriptionIdentifier, nil, nil)
+                    completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
+                    return
+                }
+                
                 guard let subscriptionTimeout = UInt(timeoutString) else {
                     completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
                     return
                 }
                 
-                if (currentExpirationTimer.valid){
+                if let currentExpirationTimer = currentExpirationTimerº where currentExpirationTimer.valid {
                     currentExpirationTimer.invalidate { (timer:DispatchTimer) in }
                 }
-                if (currentResubscriptionTimer.valid){
+                if let currentResubscriptionTimer = currentResubscriptionTimerº where currentResubscriptionTimer.valid {
                     currentResubscriptionTimer.invalidate() { (timer:DispatchTimer) in }
                 }
                 
@@ -369,7 +394,7 @@ public class GENAServer {
     
     public func unsubscribeFromService(service:UPNPService, completionHandler:(errorº:ErrorType?) -> Void){
         
-        guard let (currentSubscriptionSID, currentExpirationTimer, currentResubscriptionTimer) = self.subscribersData[service] else {
+        guard let (currentSubscriptionSID, currentExpirationTimerº, currentResubscriptionTimerº) = self.subscribersData[service] else {
             completionHandler(errorº: Error.NotSubscribedToService)
             return
         }
@@ -400,10 +425,10 @@ public class GENAServer {
                 completionHandler(errorº: error)
             } else {
                 
-                if (currentExpirationTimer.valid){
+                if let currentExpirationTimer = currentExpirationTimerº where currentExpirationTimer.valid {
                     currentExpirationTimer.invalidate { (timer:DispatchTimer) in }
                 }
-                if (currentResubscriptionTimer.valid){
+                if let currentResubscriptionTimer = currentResubscriptionTimerº where currentResubscriptionTimer.valid {
                     currentResubscriptionTimer.invalidate() { (timer:DispatchTimer) in }
                 }
                 

@@ -155,16 +155,24 @@ public struct GENAMessage {
         
         var propertySet = [String: String]()
         
-        if let propertySetData = bodyString.dataUsingEncoding(NSUTF8StringEncoding) {
+        if let propertySetData = (bodyString as
+            NSString).stringByDecodingHTMLEntities().dataUsingEncoding(NSUTF8StringEncoding) {
+            
             if let propertyElements = XMLSerialization.XMLObjectWithDataº(propertySetData)?.childElements {
                 for propertyContainerElement in propertyElements {
-                    if let propertyValueElement = propertyContainerElement.childElements.first {
+                        
+                    if let propertyValueElement = propertyContainerElement.childElements.first where propertyValueElement.name == "LastChange" {
+                            
+                        //make sure to properly parse lastChange update
+                            
+                    } else if let propertyValueElement = propertyContainerElement.childElements.first{
                         if let propertyValue = propertyValueElement.valueº {
                             propertySet[propertyValueElement.name] = propertyValue
                         }
                     }
                 }
             }
+                
         }
         
         return propertySet

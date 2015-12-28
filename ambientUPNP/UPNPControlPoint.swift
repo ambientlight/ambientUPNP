@@ -305,40 +305,40 @@ public class UPNPControlPoint: SSDPServerDelegate, UPNPDeviceDelegate, UPNPServi
         self.devices.insert(device)
         _processPendingAdvertisementsForDevice(device)
         
-        _networkLampDeviceTests(device)
+        //_networkLampDeviceTests(device)
     }
     
     //MARK: Delegate: UPNPServiceDelegate
     
     public func service(service: UPNPService, eventNotificationDidUpdateStateVariable stateVariable: UPNPStateVariable) {
         if let associatedValue = stateVariable.associatedValue as? String {
-            NSLog("\(service.serviceType): stateVariable did update: \(stateVariable.name) = \(associatedValue)")
+            NSLog("\(service.device.friendlyName):\(service.serviceType): stateVariable did update: \(stateVariable.name) = \(associatedValue)")
         }
     }
     
     
     public func serviceDidSubscribeForEventing(service: UPNPService) {
-        NSLog("\(service.serviceType) has subscribed for eventing")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) has subscribed for eventing")
     }
     
     public func service(service: UPNPService, didFailToSubscribeForEventingWithError error: ErrorType) {
-        NSLog("\(service.serviceType) has failed to subscribe for eventing: \(error)")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) has failed to subscribe for eventing: \(error)")
     }
 
     public func serviceDidRecieveInitialEventNotification(service: UPNPService) {
-        NSLog("\(service.serviceType) did receive initial event notification")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) did receive initial event notification")
     }
     
     public func serviceDidResubscribeForEventing(service: UPNPService) {
-        NSLog("\(service.serviceType) did resubscribe for eventing")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) did resubscribe for eventing")
     }
     
     public func serviceDidUnsubscribeFromEventing(service: UPNPService) {
-        NSLog("\(service.serviceType) did unsubscribe from eventing")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) did unsubscribe from eventing")
     }
     
     public func serviceSubscriptionDidExpire(service: UPNPService) {
-        NSLog("\(service.serviceType) subscription did expire")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) subscription did expire")
     }
     
     //MARK: Tests

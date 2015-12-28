@@ -18,3 +18,4 @@ FOUNDATION_EXPORT const unsigned char ambientUPNPVersionString[];
 
 
 #include "ifaddrs.h"
+#include "NSString+HTML.h"
