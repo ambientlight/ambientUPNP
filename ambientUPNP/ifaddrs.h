@@ -1,11 +1,3 @@
-//
-//  ifaddrs.h
-//  ambientUPNP
-//
-//  Created by Taras Vozniuk on 12/27/15.
-//  Copyright © 2015 ambientlight. All rights reserved.
-//
-
 /*	$FreeBSD: src/include/ifaddrs.h,v 1.3.32.1.4.1 2010/06/14 02:09:06 kensmith Exp $	*/
 
 /*

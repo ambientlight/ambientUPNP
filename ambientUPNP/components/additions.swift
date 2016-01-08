@@ -8,6 +8,20 @@
 
 import Foundation
 
+func synchronized(lockedObject: AnyObject, closure: () -> Void) {
+    objc_sync_enter(lockedObject)
+    defer { objc_sync_exit(lockedObject) }
+    
+    closure()
+}
+
+func synchronized(lockedObject: AnyObject, closure: () throws -> Void) throws {
+    objc_sync_enter(lockedObject)
+    defer { objc_sync_exit(lockedObject) }
+    
+    try closure()
+}
+
 extension UInt {
     
     func iterate(block:()->Void){

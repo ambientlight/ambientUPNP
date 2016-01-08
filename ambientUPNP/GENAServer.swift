@@ -39,9 +39,12 @@ public class GENAServer {
     public private(set) var eventNotificationPersistentConnectionDispatchSources = [String: dispatch_source_t]()
     
     //subscriptionData: [subscriberService: (sid, expirationTimer, resubscriptionTimer)]
-    public private(set) var subscribersData = [UPNPService: (String, DispatchTimer?, DispatchTimer?)]()
-    
-    
+    public private(set) var subscribersData = [UPNPService: (String, DispatchTimer?, DispatchTimer?)]() {
+        willSet {
+            //NSLog("<previousSubscribersData>: \(subscribersData.count) sids")
+            //NSLog("<newSubscribersData>: \(newValue.count) sids")
+        }
+    }
     public private(set) var isRunning = false
     
     
@@ -50,7 +53,7 @@ public class GENAServer {
     
     private let _multicastEventQueue:dispatch_queue_t = dispatch_queue_create(_multicastEventQueueLabel, dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_BACKGROUND, 0))
     private let _unicastQueue:dispatch_queue_t = dispatch_queue_create(_unicastEventQueueLabel, dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_BACKGROUND, 0))
-    private var _subscriptionExpirationQueue:dispatch_queue_t = dispatch_queue_create("com.ambientlight.gena-server.subscription-expiration-queue", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_BACKGROUND, 0))
+    private var _subscriptionHandlingQueue:dispatch_queue_t = dispatch_queue_create("com.ambientlight.gena-server.subscription-handling-queue", dispatch_queue_attr_make_with_qos_class(DISPATCH_QUEUE_SERIAL, QOS_CLASS_BACKGROUND, 0))
     
     
     private var _multicastEventSourceº:dispatch_source_t?
@@ -114,6 +117,9 @@ public class GENAServer {
                 try SocketPosix.optionSetPacketTTL(publisherSocket, ttl: 2)
                 
                 let (data, senderAddress) = try SocketPosix.recvData(publisherSocket)
+                //NSLog("<MESSAGE CONTENT>\n\(String(data: data, encoding: NSUTF8StringEncoding)!)\n<MESSAGE CONTENT END>\n")
+                //NSLog("Response recieved")
+                
                 let eventMessage = try GENAMessage.messageWithData(data, senderAddress: senderAddress)
                 eventSubscriptionIdentifierº = eventMessage.subscriptionIdentifierº
                 needsToKeepPersistentConnection = try self._handleUnicastEventMessageAndNotifyIfConnectionShouldBeClosed(eventMessage, socket: publisherSocket)
@@ -122,8 +128,14 @@ public class GENAServer {
                 print(error)
             }
             
+            SocketPosix.release(publisherSocket)
+            return
+            
+            /*
+            
             // setting up a dispatch_source for connected socket, or closing the connection
             if (needsToKeepPersistentConnection && eventSubscriptionIdentifierº != nil){
+                
                 
                 //NSLog("Keep-alive: Connected \(SocketPosix.addressString(unsafeBitCast(publisherAddress, sockaddr_in.self))) with socket(\(publisherSocket)) for event notifications.")
                 
@@ -134,6 +146,8 @@ public class GENAServer {
                     do {
                         
                         let (data, senderAddress) = try SocketPosix.recvData(publisherSocket)
+                        NSLog("<Keep-alive: MESSAGE CONTENT>\n\(String(data: data, encoding: NSUTF8StringEncoding)!)\n<Keep-alive: MESSAGE CONTENT END>\n")
+                        
                         do {
                             let eventMessage = try GENAMessage.messageWithData(data, senderAddress: senderAddress)
                             needsToKeepPersistentConnection = try self._handleUnicastEventMessageAndNotifyIfConnectionShouldBeClosed(eventMessage, socket: publisherSocket)
@@ -168,6 +182,8 @@ public class GENAServer {
             } else {
                 SocketPosix.release(publisherSocket)
             }
+            
+            */
         }
         
         dispatch_resume(unicastSource)
@@ -215,69 +231,76 @@ public class GENAServer {
         
         let dataTask:NSURLSessionDataTask = session.dataTaskWithRequest(subscribeRequest) { (dataº:NSData?, responseº:NSURLResponse?, errorº:NSError?) in
             
-            if let error = errorº {
-                completionHandler(subscriptionIdentifierº: nil, errorº: error)
-                return
-            }
-            
-            if let response = responseº as? NSHTTPURLResponse {
-                guard let subscriptionIdentifier = response.allHeaderFields[GENAMessage.HeaderField.SID.rawValue] as? String,
-                      let timeoutComponentsString = response.allHeaderFields[GENAMessage.HeaderField.Timeout.rawValue] as? String
-                else {
-                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.RequiredHeaderFieldIsNotPresentInResponse)
+            dispatch_async(self._subscriptionHandlingQueue){
+                
+                if let error = errorº {
+                    completionHandler(subscriptionIdentifierº: nil, errorº: error)
                     return
                 }
                 
-                if let _ = response.allHeaderFields[GENAMessage.HeaderField.Statevar.rawValue] as? String {
-                    //do something with accepted statevar CSV
-                }
-            
-                guard let timeoutString = timeoutComponentsString.componentsSeparatedByString("-").last else {
-                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
-                    return
-                }
-                
-                // infinite subscription. No Expiration
-                if (timeoutString == "infinite"){
-                    self.subscribersData[service] = (subscriptionIdentifier, nil, nil)
-                    completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
-                    return
-                }
-                
-                guard let subscriptionTimeout = UInt(timeoutString) else {
-                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
-                    return
-                }
-                
-                
-                let expirationTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: subscriptionTimeout * 1000, queue: self._subscriptionExpirationQueue, repeats: false) { (timer: DispatchTimer) in
-                    
-                    self.subscribersData.removeValueForKey(service)
-                    if let persistentConnectionSource = self.eventNotificationPersistentConnectionDispatchSources[subscriptionIdentifier] {
-                        dispatch_source_cancel(persistentConnectionSource)
+                if let response = responseº as? NSHTTPURLResponse {
+                    guard let subscriptionIdentifier = response.allHeaderFields[GENAMessage.HeaderField.SID.rawValue] as? String,
+                        let timeoutComponentsString = response.allHeaderFields[GENAMessage.HeaderField.Timeout.rawValue] as? String
+                        else {
+                            completionHandler(subscriptionIdentifierº: nil, errorº: Error.RequiredHeaderFieldIsNotPresentInResponse)
+                            return
                     }
                     
-                    service.subscriptionDidExpire()
-                }
-                
-                let resubscriptionMilliseconds = UInt(Double(subscriptionTimeout) * _subscriptionExpirationRefreshFraction * 1000)
-                let resubscriptionTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: resubscriptionMilliseconds, queue: self._subscriptionExpirationQueue, repeats: false) { (timer:DispatchTimer) in
-                    
-                    if (expirationTimer.valid){
-                        expirationTimer.invalidate() { (timer:DispatchTimer) in }
+                    if let _ = response.allHeaderFields[GENAMessage.HeaderField.Statevar.rawValue] as? String {
+                        //do something with accepted statevar CSV
                     }
                     
-                    self.resubscribeToService(service) { (subscriptionIdentifierº:String?, errorº:ErrorType?) in
+                    guard let timeoutString = timeoutComponentsString.componentsSeparatedByString("-").last else {
+                        completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
+                        return
+                    }
+                    
+                    // infinite subscription. No Expiration
+                    if (timeoutString == "infinite"){
                         
-                        //delegate error callback
+                        self.subscribersData[service] = (subscriptionIdentifier, nil, nil)
+                        
+                        completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
+                        return
                     }
+                    
+                    guard let subscriptionTimeout = UInt(timeoutString) else {
+                        completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
+                        return
+                    }
+                    
+                    
+                    let expirationTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: subscriptionTimeout * 1000, queue: self._subscriptionHandlingQueue, repeats: false) { (timer: DispatchTimer) in
+                        
+                        self.subscribersData.removeValueForKey(service)
+                        if let persistentConnectionSource = self.eventNotificationPersistentConnectionDispatchSources[subscriptionIdentifier] {
+                            dispatch_source_cancel(persistentConnectionSource)
+                        }
+                        
+                        service.subscriptionDidExpire()
+                    }
+                    
+                    let resubscriptionMilliseconds = UInt(Double(subscriptionTimeout) * _subscriptionExpirationRefreshFraction * 1000)
+                    let resubscriptionTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: resubscriptionMilliseconds, queue: self._subscriptionHandlingQueue, repeats: false) { (timer:DispatchTimer) in
+                        
+                        if (expirationTimer.valid){
+                            expirationTimer.invalidate() { (timer:DispatchTimer) in }
+                        }
+                        
+                        self.resubscribeToService(service) { (subscriptionIdentifierº:String?, errorº:ErrorType?) in
+                            
+                            //delegate error callback
+                        }
+                    }
+                    
+                    self.subscribersData[service] = (subscriptionIdentifier, expirationTimer, resubscriptionTimer)
+                    completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
+                    
+                } else {
+                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.NoResponse)
                 }
+
                 
-                self.subscribersData[service] = (subscriptionIdentifier, expirationTimer, resubscriptionTimer)
-                completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
-                
-            } else {
-                completionHandler(subscriptionIdentifierº: nil, errorº: Error.NoResponse)
             }
         }
         
@@ -286,163 +309,178 @@ public class GENAServer {
     
     public func resubscribeToService(service:UPNPService, completionHandler:(subscriptionIdentifierº:String?, errorº:ErrorType?) -> Void){
         
-        guard let (currentSubscriptionSID, currentExpirationTimerº, currentResubscriptionTimerº) = self.subscribersData[service] else {
-            completionHandler(subscriptionIdentifierº: nil, errorº: Error.NotSubscribedToService)
-            return
-        }
-        
-        let subscribeRequest = NSMutableURLRequest(URL: service.eventSubURL, cachePolicy: .UseProtocolCachePolicy, timeoutInterval: 30)
-        subscribeRequest.HTTPMethod = GENAMessage.Method.SUBSCRIBE.rawValue
-        
-        var portº: Int?
-        if let hostURL = service.device.hostURL {
-            let urlComponents = NSURLComponents(URL: hostURL, resolvingAgainstBaseURL: false)
-            portº = urlComponents?.port?.integerValue
-        }
-        
-        var hostString = SocketPosix.addressString(service.device.address)
-        if let port = portº {
-            hostString += ":\(port)"
-        }
-        
-        subscribeRequest.setValue(hostString, forHTTPHeaderField: GENAMessage.HeaderField.Host.rawValue)
-        subscribeRequest.setValue(currentSubscriptionSID, forHTTPHeaderField: GENAMessage.HeaderField.SID.rawValue)
-        
-        let sessionConfiguration = NSURLSessionConfiguration.defaultSessionConfiguration()
-        let session = NSURLSession(configuration: sessionConfiguration, delegate: nil, delegateQueue: nil)
-        
-        let dataTask:NSURLSessionDataTask = session.dataTaskWithRequest(subscribeRequest) { (dataº:NSData?, responseº:NSURLResponse?, errorº:NSError?) in
+        dispatch_async(self._subscriptionHandlingQueue){
             
-            if let error = errorº {
-                completionHandler(subscriptionIdentifierº: nil, errorº: error)
+            guard let (currentSubscriptionSID, currentExpirationTimerº, currentResubscriptionTimerº) = self.subscribersData[service] else {
+                completionHandler(subscriptionIdentifierº: nil, errorº: Error.NotSubscribedToService)
                 return
             }
             
-            if let response = responseº as? NSHTTPURLResponse {
-                
-                guard let subscriptionIdentifier = response.allHeaderFields[GENAMessage.HeaderField.SID.rawValue] as? String,
-                      let timeoutComponentsString = response.allHeaderFields[GENAMessage.HeaderField.Timeout.rawValue] as? String
-                else {
-                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.RequiredHeaderFieldIsNotPresentInResponse)
-                    return
-                }
-                
-                if let _ = response.allHeaderFields[GENAMessage.HeaderField.Statevar.rawValue] as? String {
-                    //do something with accepted statevar CSV
-                }
-                
-                guard let timeoutString = timeoutComponentsString.componentsSeparatedByString("-").last else {
-                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
-                    return
-                }
-                
-                // infinite subscription. No Expiration
-                if (timeoutString == "infinite"){
-                    self.subscribersData[service] = (subscriptionIdentifier, nil, nil)
-                    completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
-                    return
-                }
-                
-                guard let subscriptionTimeout = UInt(timeoutString) else {
-                    completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
-                    return
-                }
-                
-                if let currentExpirationTimer = currentExpirationTimerº where currentExpirationTimer.valid {
-                    currentExpirationTimer.invalidate { (timer:DispatchTimer) in }
-                }
-                if let currentResubscriptionTimer = currentResubscriptionTimerº where currentResubscriptionTimer.valid {
-                    currentResubscriptionTimer.invalidate() { (timer:DispatchTimer) in }
-                }
-                
-                
-                let expirationTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: subscriptionTimeout * 1000, queue: self._subscriptionExpirationQueue, repeats: false) { (timer: DispatchTimer) in
-                    
-                    self.subscribersData.removeValueForKey(service)
-                    if let persistentConnectionSource = self.eventNotificationPersistentConnectionDispatchSources[subscriptionIdentifier] {
-                        dispatch_source_cancel(persistentConnectionSource)
-                    }
-                    
-                    service.subscriptionDidExpire()
-                }
-                
-                let resubscriptionMilliseconds = UInt(Double(subscriptionTimeout) * _subscriptionExpirationRefreshFraction * 1000)
-                let resubscriptionTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: resubscriptionMilliseconds, queue: self._subscriptionExpirationQueue, repeats: false) { (timer:DispatchTimer) in
-                    
-                    if (expirationTimer.valid){
-                        expirationTimer.invalidate() { (timer:DispatchTimer) in }
-                    }
-                    
-                    self.resubscribeToService(service) { (subscriptionIdentifierº:String?, errorº:ErrorType?) in
-                        
-                        //delegate error callback
-                    }
-                }
-                
-                self.subscribersData[service] = (subscriptionIdentifier, expirationTimer, resubscriptionTimer)
-                
-                service.subscriptionDidResubscribe(subscriptionIdentifier)
-                completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
-                
-            } else {
-                completionHandler(subscriptionIdentifierº: nil, errorº: Error.NoResponse)
+            let subscribeRequest = NSMutableURLRequest(URL: service.eventSubURL, cachePolicy: .UseProtocolCachePolicy, timeoutInterval: 30)
+            subscribeRequest.HTTPMethod = GENAMessage.Method.SUBSCRIBE.rawValue
+            
+            var portº: Int?
+            if let hostURL = service.device.hostURL {
+                let urlComponents = NSURLComponents(URL: hostURL, resolvingAgainstBaseURL: false)
+                portº = urlComponents?.port?.integerValue
             }
+            
+            var hostString = SocketPosix.addressString(service.device.address)
+            if let port = portº {
+                hostString += ":\(port)"
+            }
+            
+            subscribeRequest.setValue(hostString, forHTTPHeaderField: GENAMessage.HeaderField.Host.rawValue)
+            subscribeRequest.setValue(currentSubscriptionSID, forHTTPHeaderField: GENAMessage.HeaderField.SID.rawValue)
+            
+            let sessionConfiguration = NSURLSessionConfiguration.defaultSessionConfiguration()
+            let session = NSURLSession(configuration: sessionConfiguration, delegate: nil, delegateQueue: nil)
+            
+            let dataTask:NSURLSessionDataTask = session.dataTaskWithRequest(subscribeRequest) { (dataº:NSData?, responseº:NSURLResponse?, errorº:NSError?) in
+                
+                dispatch_async(self._subscriptionHandlingQueue){
+                    
+                    if let error = errorº {
+                        completionHandler(subscriptionIdentifierº: nil, errorº: error)
+                        return
+                    }
+                    
+                    if let response = responseº as? NSHTTPURLResponse {
+                        
+                        guard let subscriptionIdentifier = response.allHeaderFields[GENAMessage.HeaderField.SID.rawValue] as? String,
+                            let timeoutComponentsString = response.allHeaderFields[GENAMessage.HeaderField.Timeout.rawValue] as? String
+                            else {
+                                completionHandler(subscriptionIdentifierº: nil, errorº: Error.RequiredHeaderFieldIsNotPresentInResponse)
+                                return
+                        }
+                        
+                        if let _ = response.allHeaderFields[GENAMessage.HeaderField.Statevar.rawValue] as? String {
+                            //do something with accepted statevar CSV
+                        }
+                        
+                        guard let timeoutString = timeoutComponentsString.componentsSeparatedByString("-").last else {
+                            completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
+                            return
+                        }
+                        
+                        // infinite subscription. No Expiration
+                        if (timeoutString == "infinite"){
+                            self.subscribersData[service] = (subscriptionIdentifier, nil, nil)
+                            completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
+                            return
+                        }
+                        
+                        guard let subscriptionTimeout = UInt(timeoutString) else {
+                            completionHandler(subscriptionIdentifierº: nil, errorº: Error.TimeoutParsingFailure)
+                            return
+                        }
+                        
+                        if let currentExpirationTimer = currentExpirationTimerº where currentExpirationTimer.valid {
+                            currentExpirationTimer.invalidate { (timer:DispatchTimer) in }
+                        }
+                        if let currentResubscriptionTimer = currentResubscriptionTimerº where currentResubscriptionTimer.valid {
+                            currentResubscriptionTimer.invalidate() { (timer:DispatchTimer) in }
+                        }
+                        
+                        
+                        let expirationTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: subscriptionTimeout * 1000, queue: self._subscriptionHandlingQueue, repeats: false) { (timer: DispatchTimer) in
+                            
+                            self.subscribersData.removeValueForKey(service)
+                            if let persistentConnectionSource = self.eventNotificationPersistentConnectionDispatchSources[subscriptionIdentifier] {
+                                dispatch_source_cancel(persistentConnectionSource)
+                            }
+                            
+                            service.subscriptionDidExpire()
+                        }
+                        
+                        let resubscriptionMilliseconds = UInt(Double(subscriptionTimeout) * _subscriptionExpirationRefreshFraction * 1000)
+                        let resubscriptionTimer = DispatchTimer.scheduledTimerWithTimeInterval(milliseconds: resubscriptionMilliseconds, queue: self._subscriptionHandlingQueue, repeats: false) { (timer:DispatchTimer) in
+                            
+                            if (expirationTimer.valid){
+                                expirationTimer.invalidate() { (timer:DispatchTimer) in }
+                            }
+                            
+                            self.resubscribeToService(service) { (subscriptionIdentifierº:String?, errorº:ErrorType?) in
+                                
+                                //delegate error callback
+                            }
+                        }
+                        
+                        self.subscribersData[service] = (subscriptionIdentifier, expirationTimer, resubscriptionTimer)
+                        
+                        service.subscriptionDidResubscribe(subscriptionIdentifier)
+                        completionHandler(subscriptionIdentifierº: subscriptionIdentifier, errorº: nil)
+                        
+                    } else {
+                        completionHandler(subscriptionIdentifierº: nil, errorº: Error.NoResponse)
+                    }
+                    
+                }
+                
+            }
+            
+            dataTask.resume()
         }
-        
-        dataTask.resume()
     }
     
     public func unsubscribeFromService(service:UPNPService, completionHandler:(errorº:ErrorType?) -> Void){
         
-        guard let (currentSubscriptionSID, currentExpirationTimerº, currentResubscriptionTimerº) = self.subscribersData[service] else {
-            completionHandler(errorº: Error.NotSubscribedToService)
-            return
-        }
-        
-        let unsubscribeRequest = NSMutableURLRequest(URL: service.eventSubURL, cachePolicy: .UseProtocolCachePolicy, timeoutInterval: 30)
-        unsubscribeRequest.HTTPMethod = GENAMessage.Method.UNSUBSCRIBE.rawValue
-        
-        var portº: Int?
-        if let hostURL = service.device.hostURL {
-            let urlComponents = NSURLComponents(URL: hostURL, resolvingAgainstBaseURL: false)
-            portº = urlComponents?.port?.integerValue
-        }
-        
-        var hostString = SocketPosix.addressString(service.device.address)
-        if let port = portº {
-            hostString += ":\(port)"
-        }
-        
-        unsubscribeRequest.setValue(hostString, forHTTPHeaderField: GENAMessage.HeaderField.Host.rawValue)
-        unsubscribeRequest.setValue(currentSubscriptionSID, forHTTPHeaderField: GENAMessage.HeaderField.SID.rawValue)
-        
-        let sessionConfiguration = NSURLSessionConfiguration.defaultSessionConfiguration()
-        let session = NSURLSession(configuration: sessionConfiguration, delegate: nil, delegateQueue: nil)
-        
-        let dataTask:NSURLSessionDataTask = session.dataTaskWithRequest(unsubscribeRequest) { (dataº:NSData?, responseº:NSURLResponse?, errorº:NSError?) in
+        dispatch_async(_subscriptionHandlingQueue){
             
-            if let error = errorº {
-                completionHandler(errorº: error)
-            } else {
-                
-                if let currentExpirationTimer = currentExpirationTimerº where currentExpirationTimer.valid {
-                    currentExpirationTimer.invalidate { (timer:DispatchTimer) in }
-                }
-                if let currentResubscriptionTimer = currentResubscriptionTimerº where currentResubscriptionTimer.valid {
-                    currentResubscriptionTimer.invalidate() { (timer:DispatchTimer) in }
-                }
-                
-                self.subscribersData.removeValueForKey(service)
-                if let persistentConnectionSource = self.eventNotificationPersistentConnectionDispatchSources[currentSubscriptionSID] {
-                    dispatch_source_cancel(persistentConnectionSource)
-                }
-                
-                service.subscriptionDidUnsubscribe()
-                completionHandler(errorº: nil)
+            guard let (currentSubscriptionSID, currentExpirationTimerº, currentResubscriptionTimerº) = self.subscribersData[service] else {
+                completionHandler(errorº: Error.NotSubscribedToService)
+                return
             }
+            
+            let unsubscribeRequest = NSMutableURLRequest(URL: service.eventSubURL, cachePolicy: .UseProtocolCachePolicy, timeoutInterval: 30)
+            unsubscribeRequest.HTTPMethod = GENAMessage.Method.UNSUBSCRIBE.rawValue
+            
+            var portº: Int?
+            if let hostURL = service.device.hostURL {
+                let urlComponents = NSURLComponents(URL: hostURL, resolvingAgainstBaseURL: false)
+                portº = urlComponents?.port?.integerValue
+            }
+            
+            var hostString = SocketPosix.addressString(service.device.address)
+            if let port = portº {
+                hostString += ":\(port)"
+            }
+            
+            unsubscribeRequest.setValue(hostString, forHTTPHeaderField: GENAMessage.HeaderField.Host.rawValue)
+            unsubscribeRequest.setValue(currentSubscriptionSID, forHTTPHeaderField: GENAMessage.HeaderField.SID.rawValue)
+            
+            let sessionConfiguration = NSURLSessionConfiguration.defaultSessionConfiguration()
+            let session = NSURLSession(configuration: sessionConfiguration, delegate: nil, delegateQueue: nil)
+            
+            let dataTask:NSURLSessionDataTask = session.dataTaskWithRequest(unsubscribeRequest) { (dataº:NSData?, responseº:NSURLResponse?, errorº:NSError?) in
+                
+                dispatch_async(self._subscriptionHandlingQueue){
+                    
+                    if let error = errorº {
+                        completionHandler(errorº: error)
+                    } else {
+                        
+                        if let currentExpirationTimer = currentExpirationTimerº where currentExpirationTimer.valid {
+                            currentExpirationTimer.invalidate { (timer:DispatchTimer) in }
+                        }
+                        if let currentResubscriptionTimer = currentResubscriptionTimerº where currentResubscriptionTimer.valid {
+                            currentResubscriptionTimer.invalidate() { (timer:DispatchTimer) in }
+                        }
+                        
+                        self.subscribersData.removeValueForKey(service)
+                        if let persistentConnectionSource = self.eventNotificationPersistentConnectionDispatchSources[currentSubscriptionSID] {
+                            dispatch_source_cancel(persistentConnectionSource)
+                        }
+                        
+                        service.subscriptionDidUnsubscribe()
+                        completionHandler(errorº: nil)
+                    }
+                }
+                
+            }
+            
+            dataTask.resume()
         }
-        
-        dataTask.resume()
     }
     
     //MARK: private: Methods
@@ -454,15 +492,23 @@ public class GENAServer {
         guard let messageSubscriptionIdentifier = eventMessage.subscriptionIdentifierº else {
             throw Error.MessageDoesntContainSubscriptionIdentifier
         }
+        
+        dispatch_sync(_subscriptionHandlingQueue){
             
-        for (service, (subscriptionIdentifier, _, _)) in self.subscribersData {
-            if (subscriptionIdentifier == messageSubscriptionIdentifier){
-                service.handleEventWithMessage(eventMessage)
-                break;
+            var didFindSubscriptionIdentifier: Bool = false
+            for (service, (subscriptionIdentifier, _, _)) in self.subscribersData {
+                if (subscriptionIdentifier == messageSubscriptionIdentifier){
+                    service.handleEventWithMessage(eventMessage)
+                    didFindSubscriptionIdentifier = true
+                    break;
+                }
+            }
+            
+            if !didFindSubscriptionIdentifier {
+                //NSLog("WARN: Subscription idenifier \(messageSubscriptionIdentifier) doesn't match the current subscriber list.")
             }
         }
-            
-
+        
         // send response
         if let responseOKData = GENAMessage.httpResponseOKData() {
             try SocketPosix.writeData(socket, data: responseOKData)
@@ -496,12 +542,21 @@ public class GENAServer {
             throw Error.MessageDoesntContainSubscriptionIdentifier
         }
         
-        for (service, (subscriptionIdentifier, _, _)) in self.subscribersData {
-            if (subscriptionIdentifier == messageSubscriptionIdentifier){
-                service.handleEventWithMessage(eventMessage)
-                break;
+        dispatch_async(_subscriptionHandlingQueue){
+            
+            var didFindSubscriptionIdentifier: Bool = false
+            for (service, (subscriptionIdentifier, _, _)) in self.subscribersData {
+                if (subscriptionIdentifier == messageSubscriptionIdentifier){
+                    service.handleEventWithMessage(eventMessage)
+                    didFindSubscriptionIdentifier = true
+                    break;
+                }
+            }
+            
+            if !didFindSubscriptionIdentifier {
+                //NSLog("WARN: Subscription idenifier \(messageSubscriptionIdentifier) doesn't match the current subscriber list.")
             }
         }
-        
     }
+    
 }

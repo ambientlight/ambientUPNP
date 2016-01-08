@@ -300,7 +300,7 @@ public class UPNPControlPoint: SSDPServerDelegate, UPNPDeviceDelegate, UPNPServi
     
     func deviceDidInitialize(device: UPNPDevice) {
         
-        NSLog("\(device.friendlyName) has been added.")
+        NSLog("\(device.friendlyName) has been added. (services: \(device.services.count))")
         self.uuidPendingDevices.remove(device.universalUniqueIdentifier)
         self.devices.insert(device)
         _processPendingAdvertisementsForDevice(device)
@@ -316,9 +316,8 @@ public class UPNPControlPoint: SSDPServerDelegate, UPNPDeviceDelegate, UPNPServi
         }
     }
     
-    
     public func serviceDidSubscribeForEventing(service: UPNPService) {
-        NSLog("\(service.device.friendlyName):\(service.serviceType) has subscribed for eventing")
+        NSLog("\(service.device.friendlyName):\(service.serviceType) subscribed with identifier: \(service.subscriptionIdentifierº!)")
     }
     
     public func service(service: UPNPService, didFailToSubscribeForEventingWithError error: ErrorType) {

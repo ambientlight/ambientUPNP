@@ -142,10 +142,16 @@ public class UPNPService: UPNPEntity {
     //MARK: internal: Eventing-related callbacks from GENAServer
     internal func handleEventWithMessage(eventMessage: GENAMessage) {
         
-        for (updatedStateVariableName, updatedValue) in eventMessage.propertySet {
-            if let stateVariableToUpdate = self.stateVariable(forName: updatedStateVariableName) {
+        for (updatedStateVariableName, (updatedValue, isUpdatedValueContainsXML)) in eventMessage.propertySet {
+            
+            if let stateVariableToUpdate = self.stateVariable(forName: updatedStateVariableName) where !isUpdatedValueContainsXML {
                 stateVariableToUpdate.associatedValue = updatedValue
                 self.delegateº?.service(self, eventNotificationDidUpdateStateVariable: stateVariableToUpdate)
+                
+            } else if let xmlBatchUpdateElement = updatedValue as? XMLElement {
+                
+                // batch xml updates such as 'LastChange' has to be handled properly in subclass ovverrides of this method
+                NSLog("\(self.device.friendlyName):\(self.serviceType): did recieve batch update: \(updatedStateVariableName) = \(XMLSerialization.stringWithXMLObject(xmlBatchUpdateElement))")
             }
         }
         
@@ -181,4 +187,16 @@ public class UPNPService: UPNPEntity {
         
         self.delegateº?.serviceSubscriptionDidExpire(self)
     }
+}
+
+extension UPNPService: Hashable {
+    
+    public var hashValue: Int {
+        return "\(self.device.identifier):\(self.identifier)".hashValue
+    }
+}
+
+//MARK: Equatable
+public func ==(lhs: UPNPService, rhs: UPNPService) -> Bool {
+    return ("\(lhs.device.identifier):\(lhs.identifier)" == "\(rhs.device.identifier):\(rhs.identifier)")
 }

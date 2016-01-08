@@ -10,7 +10,7 @@ import Foundation
 
 // all functionality that applies both to devices and services should go here
 
-public class UPNPEntity:Equatable {
+public class UPNPEntity {
     
     public enum Status {
         case InitError
@@ -36,16 +36,5 @@ public class UPNPEntity:Equatable {
         self.descriptionURL = descriptionURL
         self.specVersion = specVersion
     }
-}
-
-extension UPNPEntity:Hashable {
-    public var hashValue: Int {
-        return self.identifier.hashValue
-    }
-}
-
-//MARK: Equatable
-public func ==(lhs: UPNPEntity, rhs: UPNPEntity) -> Bool {
-    return (lhs.identifier == rhs.identifier)
 }
 

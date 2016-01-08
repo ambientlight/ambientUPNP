@@ -317,3 +317,15 @@ public class UPNPDevice:UPNPEntity {
 
     
 }
+
+extension UPNPDevice: Hashable {
+    
+    //MARK: Equatable
+    public var hashValue: Int {
+        return self.identifier.hashValue
+    }
+}
+
+public func ==(lhs: UPNPDevice, rhs: UPNPDevice) -> Bool {
+    return (lhs.identifier == rhs.identifier)
+}

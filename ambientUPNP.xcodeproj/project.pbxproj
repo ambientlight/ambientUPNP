@@ -172,7 +172,6 @@
 			children = (
 				1AE139FF1C31C95900715882 /* _legacy */,
 				1A87432F1B960CD800DAF4E1 /* ambientUPNP.h */,
-				1A0D33C11C2F2D5B004F7DD0 /* ifaddrs.h */,
 				1A8743311B960CD800DAF4E1 /* Info.plist */,
 				1AF1A4251BA495D4003EC722 /* upnpPlayground.playground */,
 			);
@@ -182,6 +181,7 @@
 		1AE139FF1C31C95900715882 /* _legacy */ = {
 			isa = PBXGroup;
 			children = (
+				1A0D33C11C2F2D5B004F7DD0 /* ifaddrs.h */,
 				1AE139F71C31C66200715882 /* NSString+HTML.h */,
 				1AE139F81C31C66200715882 /* NSString+HTML.m */,
 				1AE139F91C31C66200715882 /* GTMNSString+HTML.h */,

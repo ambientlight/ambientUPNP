@@ -81,7 +81,8 @@ public struct GENAMessage {
     //address of this message sender
     public var originatorAddress: sockaddr_in?
     
-    public var propertySet = [String: String]()
+    // [propertyName: (propertyValue, propertyValueIsXML)
+    public var propertySet = [String: (AnyObject, Bool)]()
     
     public static func messageWithData(data: NSData, senderAddress: sockaddr_in? = nil) throws -> GENAMessage {
         
@@ -151,29 +152,36 @@ public struct GENAMessage {
     }
     
     
-    private static func _propertySetFromString(bodyString: String) -> [String: String] {
+    private static func _propertySetFromString(bodyString: String) -> [String: (AnyObject, Bool)] {
         
-        var propertySet = [String: String]()
+        //NSLog("<BODY STRING>\n\(bodyString)")
         
-        if let propertySetData = (bodyString as
-            NSString).stringByDecodingHTMLEntities().dataUsingEncoding(NSUTF8StringEncoding) {
+        var propertySet = [String: (AnyObject, Bool)]()
+        
+        if let propertySetData = (bodyString as NSString).stringByDecodingHTMLEntities().dataUsingEncoding(NSUTF8StringEncoding) {
             
             if let propertyElements = XMLSerialization.XMLObjectWithDataº(propertySetData)?.childElements {
                 for propertyContainerElement in propertyElements {
                         
-                    if let propertyValueElement = propertyContainerElement.childElements.first where propertyValueElement.name == "LastChange" {
-                            
-                        //make sure to properly parse lastChange update
-                            
-                    } else if let propertyValueElement = propertyContainerElement.childElements.first{
+                    if let propertyValueElement = propertyContainerElement.childElements.first where propertyValueElement.childElements.count != 0 {
+                        propertySet[propertyValueElement.name] = (propertyValueElement.childElements[0], true)
+                        
+                        //NSLog("<RECIEVED BATCH>:\n\(XMLSerialization.stringWithXMLObject(propertyValueElement.childElements[0]))")
+                        
+                    } else if let propertyValueElement = propertyContainerElement.childElements.first {
                         if let propertyValue = propertyValueElement.valueº {
-                            propertySet[propertyValueElement.name] = propertyValue
+                            propertySet[propertyValueElement.name] = (propertyValue, false)
                         }
                     }
                 }
             }
                 
         }
+        
+        /*
+        if (propertySet.count == 0){
+            NSLog("Property Set wasn't parsed.")
+        }*/
         
         return propertySet
     }
