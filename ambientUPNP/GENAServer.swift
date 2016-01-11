@@ -60,7 +60,7 @@ public class GENAServer {
     private var _unicastSourceº:dispatch_source_t?
     
     //MARK: public: Methinits
-    public init() {}
+    internal init() {}
     
     public func start() throws {
         
@@ -129,7 +129,6 @@ public class GENAServer {
             }
             
             SocketPosix.release(publisherSocket)
-            return
             
             /*
             
@@ -186,10 +185,63 @@ public class GENAServer {
             */
         }
         
+        
+        dispatch_source_set_cancel_handler(unicastSource) {
+            
+            SocketPosix.release(self.incomingEventsListeningSocket)
+            self._unicastSourceº = nil
+            self.unicastSourceCancelCompletionHandlerº?()
+            self.unicastSourceCancelCompletionHandlerº = nil
+        }
+        
+        
         dispatch_resume(unicastSource)
         _unicastSourceº = unicastSource
         
         self.isRunning = true
+    }
+    
+    public func stop(completionHandlerº:((Bool) -> Void)? = nil) {
+        
+        if (!self.isRunning) {
+            completionHandlerº?(true)
+            return
+        }
+        
+        for (service, _) in self.subscribersData {
+            self.unsubscribeFromService(service) { (error:ErrorType?) in  }
+        }
+        
+        multicastEventSourceCancelCompletionHandlerº = {
+            
+            guard let unicastSource = self._unicastSourceº else {
+                NSLog("\(self.dynamicType): \(__FUNCTION__): Unicast source is nil(which shouldn't be the case here).")
+                
+                completionHandlerº?(false)
+                return
+            }
+            
+            dispatch_source_cancel(unicastSource)
+        }
+        
+        unicastSourceCancelCompletionHandlerº = {
+            
+            for (_, persistentConnectionSource) in self.eventNotificationPersistentConnectionDispatchSources {
+                dispatch_source_cancel(persistentConnectionSource)
+            }
+            
+            self.isRunning = false
+            completionHandlerº?(true)
+        }
+        
+        guard let multicastSource = self._multicastEventSourceº else {
+            NSLog("\(self.dynamicType): \(__FUNCTION__): ReadMulticast source is nil(which shouldn't be the case here).")
+            
+            completionHandlerº?(false)
+            return
+        }
+        
+        dispatch_source_cancel(multicastSource)
     }
     
     public func subscribeToService(service: UPNPService, completionHandler:(subscriptionIdentifierº:String?, errorº:ErrorType?) -> Void) {

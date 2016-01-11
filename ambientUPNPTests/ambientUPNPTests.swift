@@ -29,6 +29,28 @@ class ambientUPNPTests: XCTestCase {
         let controlPoint = UPNPControlPoint()
         do {
             try controlPoint.start()
+            
+            controlPoint.stop { (didSucceed: Bool) in
+                
+                if didSucceed {
+                    try! controlPoint.start()
+                    controlPoint.stop { (didSucceed: Bool) in
+                        
+                        if didSucceed {
+                            try! controlPoint.start()
+                            controlPoint.stop { (didSuceed: Bool) in
+                                
+                                if didSuceed {
+                                    try! controlPoint.start()
+                                }
+                            }
+                        }
+                    }
+                }
+                
+            }
+            
+            
             sleep(3600)
         } catch {
             print(error)

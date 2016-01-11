@@ -3,7 +3,7 @@
 //  AmbientUPNP
 //
 //  Created by Taras Vozniuk on 4/14/15.
-//  Copyright (c) 2015 ambientlight. All rights reserved.
+//  Copyright (c) 2015 Taras Vozniuk(ambientlight). All rights reserved.
 //
 
 import Foundation
@@ -11,7 +11,6 @@ import Foundation
 private let _cpointQueueLabel = "com.ambientlight.controlpoint"
 private let _deviceRetrievalLabel = "com.ambientlight.description-retrieval-queue"
 
-private var _testConnection:NSURLConnection?
 
 //MARK: PROTOCOL: UPNPControlPointDelegate
 
@@ -202,13 +201,14 @@ public class UPNPControlPoint: SSDPServerDelegate, UPNPDeviceDelegate, UPNPServi
         }
     }
     
-    public func stop(completionHandler:(()->Void)?){
+    public func stop(completionHandler:((Bool)->Void)?){
         dispatch_async(_cpointQueue){
             
-            self.ssdpServer.stop {
-                completionHandler?()
+            self.ssdpServer.stop { (didSSDPCancelationSucceed:Bool) in
+                self.genaServer.stop { (didGENACancelationSucceed:Bool) in
+                    completionHandler?(didSSDPCancelationSucceed && didGENACancelationSucceed)
+                }
             }
-            
         }
     }
     
@@ -366,27 +366,6 @@ public class UPNPControlPoint: SSDPServerDelegate, UPNPDeviceDelegate, UPNPServi
         
     }
     
-    /*
-    //NSURLConnection delegate
-    public func connection(connection: NSURLConnection, didReceiveResponse response: NSURLResponse) {
-        println("did receive response")
-    }
     
-    public func connection(connection: NSURLConnection, didReceiveData data: NSData) {
-        println("did receive data")
-    }
-    
-    public func connection(connection: NSURLConnection, willCacheResponse cachedResponse: NSCachedURLResponse) -> NSCachedURLResponse? {
-        return nil
-    }
-    
-    public func connectionDidFinishLoading(connection: NSURLConnection) {
-        println("did finish loading")
-    }
-    
-    public func connection(connection: NSURLConnection, didFailWithError error: NSError) {
-        println("did fail with error")
-    }
-    */
     
 }

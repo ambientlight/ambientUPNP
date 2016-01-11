@@ -70,7 +70,7 @@ public class SSDPServer {
     
     
     //MARK: public: Methinits
-    public init() {}
+    internal init() {}
     
     public func start() throws
     {
@@ -209,10 +209,11 @@ public class SSDPServer {
     // after which if we have active timers, we will start canceling them
     // Finally when the count of timers will drop to zero (in _disposeTimer()), cancelation is done
     
-    public func stop(completionHandlerº:(()->Void)? = nil){
+    public func stop(completionHandlerº:((Bool)->Void)? = nil){
         
         if(!isRunning){
-            completionHandlerº?()
+            completionHandlerº?(true)
+            return
         }
         
         readMulticastSourceCancelCompletionHandlerº = {
@@ -221,7 +222,7 @@ public class SSDPServer {
             guard let unicastSource = self._unicastSourceº else {
                 NSLog("\(self.dynamicType): \(__FUNCTION__): Unicast source is nil(which shouldn't be the case here).")
                 
-                defer { completionHandlerº?() }
+                defer { completionHandlerº?(false) }
                 return
             }
             
@@ -238,7 +239,7 @@ public class SSDPServer {
                     self.isRunning = false
                     //timers disposed, cancelation done
                     
-                    completionHandlerº?()
+                    completionHandlerº?(true)
                     
                 }
                 
@@ -249,7 +250,7 @@ public class SSDPServer {
                 self.isRunning = false
                 //cancelation done
                 
-                completionHandlerº?()
+                completionHandlerº?(true)
                 
             }
         }
@@ -257,7 +258,7 @@ public class SSDPServer {
         guard let readMulticastSource = _readMulticastSourceº else {
             NSLog("\(self.dynamicType): \(__FUNCTION__): ReadMulticast source is nil(which shouldn't be the case here).")
             
-            defer { completionHandlerº?() }
+            defer { completionHandlerº?(false) }
             return
         }
         
