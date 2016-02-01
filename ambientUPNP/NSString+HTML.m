@@ -30,6 +30,21 @@
 #import "NSString+HTML.h"
 #import "GTMNSString+HTML.h"
 
+#include <unistd.h>
+
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/ioctl.h>
+#include <netinet/in.h>
+#include <net/if.h>
+#include <arpa/inet.h>
+
+#include <sys/sysctl.h>
+//#include <net/route.h>
+
+#include <net/if_dl.h>
+
+
 @implementation NSString (HTML)
 
 #pragma mark - Instance Methods
@@ -199,6 +214,7 @@
 }
 
 - (NSString *)stringByRemovingNewLinesAndWhitespace {
+    
 	@autoreleasepool {
         
         // Strange New lines:

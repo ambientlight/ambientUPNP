@@ -66,14 +66,14 @@ public class GENAServer {
         
         if (self.isRunning) { return; }
         
-        self.multicastEventSocket = try SocketPosix.initMulticastUDPSocket(GENADefaultMulticastPort, multicastAddress: GENAMulticastAddress)
+        self.multicastEventSocket = try PosixInternals.initMulticastUDPSocket(GENADefaultMulticastPort, multicastAddress: GENAMulticastAddress)
         let multicastEventSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(self.multicastEventSocket), 0, _multicastEventQueue)
         
         dispatch_source_set_event_handler(multicastEventSource){
             
             do {
                 
-                let (data, senderAddress) = try SocketPosix.recvData(self.multicastEventSocket)
+                let (data, senderAddress) = try PosixInternals.recvData(self.multicastEventSocket)
                 let eventMessage = try GENAMessage.messageWithData(data, senderAddress: senderAddress)
                 try self._handleMulticastEventMessage(eventMessage)
                 
@@ -85,12 +85,12 @@ public class GENAServer {
         dispatch_source_set_cancel_handler(multicastEventSource){
             
             do {
-                try SocketPosix.optionLeaveMulticastGroup(self.multicastEventSocket, multicastAddress: inet_addr(GENADefaultMulticastAddressString))
+                try PosixInternals.optionLeaveMulticastGroup(self.multicastEventSocket, multicastAddress: inet_addr(GENADefaultMulticastAddressString))
             } catch {
                 print(error)
             }
             
-            SocketPosix.release(self.multicastEventSocket)
+            PosixInternals.release(self.multicastEventSocket)
             self._multicastEventSourceº = nil
             self.multicastEventSourceCancelCompletionHandlerº?()
             self.multicastEventSourceCancelCompletionHandlerº = nil
@@ -101,34 +101,40 @@ public class GENAServer {
         
         
         //TCP unicast socket for recieving unit event notifications
-        self.incomingEventsListeningSocket = try SocketPosix.initListeningTCPSocket(GENAUnicastListeningPort, address: GENAUnicastListeningAddress)
+        self.incomingEventsListeningSocket = try PosixInternals.initListeningTCPSocket(GENAUnicastListeningPort, address: GENAUnicastListeningAddress)
         let unicastSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(self.incomingEventsListeningSocket), 0, _unicastQueue)
         
         dispatch_source_set_event_handler(unicastSource){
             
-            var publisherAddress:sockaddr = SocketPosix.LegacyStructInit()
+            var publisherAddress:sockaddr = sockaddr()
             var publisherAddressLength = socklen_t(strideof(sockaddr_in))
             
             let publisherSocket = accept(self.incomingEventsListeningSocket, &publisherAddress, &publisherAddressLength)
-            var needsToKeepPersistentConnection: Bool = false
-            var eventSubscriptionIdentifierº: String?
+            //var needsToKeepPersistentConnection: Bool = false
+            //var eventSubscriptionIdentifierº: String?
             do {
-                try SocketPosix.optionDisableSigpipe(publisherSocket)
-                try SocketPosix.optionSetPacketTTL(publisherSocket, ttl: 2)
+                try PosixInternals.optionDisableSigpipe(publisherSocket)
+                try PosixInternals.optionSetPacketTTL(publisherSocket, ttl: 2)
                 
-                let (data, senderAddress) = try SocketPosix.recvData(publisherSocket)
+                
+                while (try PosixInternals.numBytesAvailableToRead(forSocket: publisherSocket) > 0){
+                    try HTTPRequest.readHTTPMessage(fromStreamSocket: publisherSocket)
+                }
+                
+                let (data, senderAddress) = try PosixInternals.recvData(publisherSocket)
                 //NSLog("<MESSAGE CONTENT>\n\(String(data: data, encoding: NSUTF8StringEncoding)!)\n<MESSAGE CONTENT END>\n")
                 //NSLog("Response recieved")
                 
                 let eventMessage = try GENAMessage.messageWithData(data, senderAddress: senderAddress)
-                eventSubscriptionIdentifierº = eventMessage.subscriptionIdentifierº
-                needsToKeepPersistentConnection = try self._handleUnicastEventMessageAndNotifyIfConnectionShouldBeClosed(eventMessage, socket: publisherSocket)
+                //eventSubscriptionIdentifierº = eventMessage.subscriptionIdentifierº
+                
+                /*needsToKeepPersistentConnection = */ try self._handleUnicastEventMessageAndNotifyIfConnectionShouldBeClosed(eventMessage, socket: publisherSocket)
                 
             } catch {
                 print(error)
             }
             
-            SocketPosix.release(publisherSocket)
+            PosixInternals.release(publisherSocket)
             
             /*
             
@@ -136,7 +142,7 @@ public class GENAServer {
             if (needsToKeepPersistentConnection && eventSubscriptionIdentifierº != nil){
                 
                 
-                //NSLog("Keep-alive: Connected \(SocketPosix.addressString(unsafeBitCast(publisherAddress, sockaddr_in.self))) with socket(\(publisherSocket)) for event notifications.")
+                //NSLog("Keep-alive: Connected \(PosixInternals.addressString(unsafeBitCast(publisherAddress, sockaddr_in.self))) with socket(\(publisherSocket)) for event notifications.")
                 
                 let publisherReadSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(publisherSocket), 0, self._unicastQueue)
                 self.eventNotificationPersistentConnectionDispatchSources[eventSubscriptionIdentifierº!] = publisherReadSource
@@ -144,7 +150,7 @@ public class GENAServer {
                     
                     do {
                         
-                        let (data, senderAddress) = try SocketPosix.recvData(publisherSocket)
+                        let (data, senderAddress) = try PosixInternals.recvData(publisherSocket)
                         NSLog("<Keep-alive: MESSAGE CONTENT>\n\(String(data: data, encoding: NSUTF8StringEncoding)!)\n<Keep-alive: MESSAGE CONTENT END>\n")
                         
                         do {
@@ -159,7 +165,7 @@ public class GENAServer {
                         
                     } catch {
                         
-                        if case SocketPosix.Error.Terminated(/*let errno*/) = error {
+                        if case PosixInternals.Error.Terminated(/*let errno*/) = error {
                             //
                         } else {
                             NSLog("Keep-alive: socket(\(publisherSocket)): \(error). Socket closed.")
@@ -171,7 +177,7 @@ public class GENAServer {
                 
                 dispatch_source_set_cancel_handler(publisherReadSource){
                     
-                    SocketPosix.release(publisherSocket)
+                    PosixInternals.release(publisherSocket)
                     self.eventNotificationPersistentConnectionDispatchSources.removeValueForKey(eventSubscriptionIdentifierº!)
                     //call completionHandler to decrement cancel count
                 }
@@ -179,7 +185,7 @@ public class GENAServer {
                 dispatch_resume(publisherReadSource)
                 
             } else {
-                SocketPosix.release(publisherSocket)
+                PosixInternals.release(publisherSocket)
             }
             
             */
@@ -188,7 +194,7 @@ public class GENAServer {
         
         dispatch_source_set_cancel_handler(unicastSource) {
             
-            SocketPosix.release(self.incomingEventsListeningSocket)
+            PosixInternals.release(self.incomingEventsListeningSocket)
             self._unicastSourceº = nil
             self.unicastSourceCancelCompletionHandlerº?()
             self.unicastSourceCancelCompletionHandlerº = nil
@@ -255,7 +261,7 @@ public class GENAServer {
             portº = urlComponents?.port?.integerValue
         }
         
-        var hostString = SocketPosix.addressString(service.device.address)
+        var hostString = PosixInternals.addressString(service.device.address)
         if let port = portº {
             hostString += ":\(port)"
         }
@@ -263,7 +269,7 @@ public class GENAServer {
         var interfaceAddressº:sockaddr_in?
         var errorº:ErrorType?
         do {
-            interfaceAddressº = try SocketPosix.firstAvailableInterfaceAddress()
+            interfaceAddressº = try PosixInternals.interfaceAddress(forInterfaceWithName: WLAN)
         } catch {
             errorº = error
         }
@@ -273,7 +279,7 @@ public class GENAServer {
             return
         }
         
-        let callbackURL = NSURL(string: "http://\(SocketPosix.addressString(interfaceAddress)):\(GENAUnicastListeningPort)/event/")
+        let callbackURL = NSURL(string: "http://\(PosixInternals.addressString(interfaceAddress)):\(GENAUnicastListeningPort)/event/")
         subscribeRequest.setValue(hostString, forHTTPHeaderField: GENAMessage.HeaderField.Host.rawValue)
         subscribeRequest.setValue("<\(callbackURL!.absoluteString)>", forHTTPHeaderField: GENAMessage.HeaderField.Callback.rawValue)
         subscribeRequest.setValue(UPNPEventNotificationType, forHTTPHeaderField: GENAMessage.HeaderField.NT.rawValue)
@@ -377,7 +383,7 @@ public class GENAServer {
                 portº = urlComponents?.port?.integerValue
             }
             
-            var hostString = SocketPosix.addressString(service.device.address)
+            var hostString = PosixInternals.addressString(service.device.address)
             if let port = portº {
                 hostString += ":\(port)"
             }
@@ -493,7 +499,7 @@ public class GENAServer {
                 portº = urlComponents?.port?.integerValue
             }
             
-            var hostString = SocketPosix.addressString(service.device.address)
+            var hostString = PosixInternals.addressString(service.device.address)
             if let port = portº {
                 hostString += ":\(port)"
             }
@@ -563,7 +569,7 @@ public class GENAServer {
         
         // send response
         if let responseOKData = GENAMessage.httpResponseOKData() {
-            try SocketPosix.writeData(socket, data: responseOKData)
+            try PosixInternals.writeData(socket, data: responseOKData)
         }
         
         // deciding if we need to keep the connection or closing socket otherwise

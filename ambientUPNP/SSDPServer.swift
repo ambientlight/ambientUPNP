@@ -78,14 +78,14 @@ public class SSDPServer {
         
         
         //multicast socket for listening to NOTIFY
-        self.readMulticastSocket = try SocketPosix.initMulticastUDPSocket(SSDPDefaultPort, multicastAddress: SSDPMulticastAddress)
+        self.readMulticastSocket = try PosixInternals.initMulticastUDPSocket(SSDPDefaultPort, multicastAddress: SSDPMulticastAddress)
         let readMulticastSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(readMulticastSocket), 0, _readMulticastQueue)
         
         dispatch_source_set_event_handler(readMulticastSource) {
             
             do {
                 
-                let (data, senderAddress) = try SocketPosix.recvData(self.readMulticastSocket, readSize: SSDPDefaultReadSize)
+                let (data, senderAddress) = try PosixInternals.recvData(self.readMulticastSocket, readSize: SSDPDefaultReadSize)
                 let message = try SSDPMessage.messageWithDataAndAddress(data, senderAddress: senderAddress)
                 //print("\(message)\n")
                 self._processMessage(message)
@@ -98,8 +98,8 @@ public class SSDPServer {
         dispatch_source_set_cancel_handler(readMulticastSource) {
             //close incoming socket
             do {
-                try SocketPosix.optionLeaveMulticastGroup(self.readMulticastSocket, multicastAddress: inet_addr(SSDPDefaultMulticastAddressString))
-                SocketPosix.release(self.readMulticastSocket)
+                try PosixInternals.optionLeaveMulticastGroup(self.readMulticastSocket, multicastAddress: inet_addr(SSDPDefaultMulticastAddressString))
+                PosixInternals.release(self.readMulticastSocket)
                 self._readMulticastSourceº = nil
                 self.readMulticastSourceCancelCompletionHandlerº?()
                 self.readMulticastSourceCancelCompletionHandlerº = nil
@@ -113,14 +113,14 @@ public class SSDPServer {
 
         
         //unicast socket for sending M-SEARCH, receiving M-SEARCH responses
-        self.unicastSocket = try SocketPosix.initPlainUPDSocket()
+        self.unicastSocket = try PosixInternals.initPlainUPDSocket()
         let unicastSource = dispatch_source_create(DISPATCH_SOURCE_TYPE_READ, UInt(unicastSocket), 0, _unicastQueue)
         
         dispatch_source_set_event_handler(unicastSource) {
             //data available to read
             
             do {
-                let (data, senderAddress) = try SocketPosix.recvData(self.unicastSocket, readSize: SSDPDefaultReadSize)
+                let (data, senderAddress) = try PosixInternals.recvData(self.unicastSocket, readSize: SSDPDefaultReadSize)
                 let message = try SSDPMessage.messageWithDataAndAddress(data, senderAddress: senderAddress)
                 //print("\(message)\n")
                 self._processMessage(message)
@@ -132,7 +132,7 @@ public class SSDPServer {
         
         dispatch_source_set_cancel_handler(unicastSource) {
             //close incoming socket
-            SocketPosix.release(self.unicastSocket)
+            PosixInternals.release(self.unicastSocket)
             self._unicastSourceº = nil
             self.unicastSourceCancelCompletionHandlerº?()
             self.unicastSourceCancelCompletionHandlerº = nil
@@ -163,7 +163,7 @@ public class SSDPServer {
             (timer:DispatchTimer) in
             
             do {
-                try SocketPosix.sendData(self.unicastSocket, toAddress: hostAddress, data: discoverySSDPMessage.data)
+                try PosixInternals.sendData(self.unicastSocket, toAddress: hostAddress, data: discoverySSDPMessage.data)
             } catch {
                 print(error)
             }
@@ -188,7 +188,7 @@ public class SSDPServer {
             (timer:DispatchTimer) in
             
             do {
-                try SocketPosix.sendData(self.unicastSocket, toAddress: SSDPMulticastAddress, data: discoverySSDPMessage.data)
+                try PosixInternals.sendData(self.unicastSocket, toAddress: SSDPMulticastAddress, data: discoverySSDPMessage.data)
             } catch {
                 print(error)
             }

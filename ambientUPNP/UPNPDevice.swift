@@ -84,7 +84,7 @@ public class UPNPDevice:UPNPEntity {
         self.associatedControlPoint = associatedControlPoint
         
         guard let deviceAddress = aliveMessage.originatorAddress else {
-            self.address = SocketPosix.LegacyStructInit()
+            self.address = sockaddr_in()
             self.deviceType = String(); self.friendlyName = String(); self.manufacturer = String(); self.modelName = String(); self.UDN = String()
             super.init(identifier: String(), descriptionURL: NSURL(), specVersion: UPNPVersion(major: 0, minor: 0))
 

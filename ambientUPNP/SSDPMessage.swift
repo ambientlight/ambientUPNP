@@ -217,7 +217,7 @@ public struct SSDPMessage {
         var message = SSDPMessage(method: .MSEARCH, statusCode: 0, statusMessage: String(), isRequest: true, httpVersion: UPNPVersion(major: 1, minor: 1), headers: [HeaderField: String](), unrecognizedHeaders: [String: String](), originatorAddress: nil)
     
         if let hostAddress = unicastAddressº {
-            let addressString = SocketPosix.addressString(hostAddress)
+            let addressString = PosixInternals.addressString(hostAddress)
             message.headers[.Host] = String("\(addressString):\(SSDPDefaultPort)")
         } else {
             message.headers[.Host] = String("\(SSDPDefaultMulticastAddressString):\(SSDPDefaultPort)")
@@ -384,7 +384,7 @@ extension SSDPMessage:CustomStringConvertible {
         
         
         if let address = originatorAddress {
-            dataString += "from \(SocketPosix.addressString(address)): {\n"
+            dataString += "from \(PosixInternals.addressString(address)): {\n"
         } else {
             dataString += "{\n"
         }
